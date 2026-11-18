@@ -44,7 +44,7 @@ def build_dim_date(start: str, end: str) -> list[tuple]:
     days = pd.date_range(start, end, freq="D")
     return [
         (int(d.strftime("%Y%m%d")), d.strftime("%Y-%m-%d"), d.day_name(),
-         int(d.dayofweek >= 5), d.month, d.year)
+        int(d.day_of_week >= 5), d.month, d.year)
         for d in days
     ]
 
