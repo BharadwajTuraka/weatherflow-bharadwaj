@@ -7,3 +7,5 @@ data/
 .ipynb_checkpoints/
 *.egg-info/
 .coverage
+docs/dq_reports/*.md
+!docs/dq_reports/example_*.md
