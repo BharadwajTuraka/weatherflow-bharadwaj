@@ -9,3 +9,4 @@ data/
 .coverage
 docs/dq_reports/*.md
 !docs/dq_reports/example_*.md
+.pytest_cache/

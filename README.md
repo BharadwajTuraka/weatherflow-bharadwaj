@@ -31,3 +31,17 @@ python -c "import sqlite3; print(sqlite3.connect('data/weather.db').execute('SEL
 ```
 
 Example output: 5 cities with 48 rows each.
+
+## Running the tests
+
+```
+pip install -e .
+pytest -v --cov=src --cov-report=term-missing
+```
+
+Tests mock the API, so they run offline. Coverage summary from the last run:
+
+```
+TOTAL    303    4    99%
+72 passed
+```
