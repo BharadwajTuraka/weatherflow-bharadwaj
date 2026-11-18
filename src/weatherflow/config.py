@@ -11,7 +11,7 @@ CONFIG_FILE = Path(__file__).resolve().parents[2] / "config.yaml"
 
 REQUIRED = {
     "api": ["forecast_url", "timeout_seconds", "max_retries", "hourly_variables", "timezone"],
-    "paths": ["raw_dir", "processed_dir", "quarantine_dir", "database"],
+        "paths": ["raw_dir", "processed_dir", "quarantine_dir", "database", "wmo_codes"],
 }
 
 

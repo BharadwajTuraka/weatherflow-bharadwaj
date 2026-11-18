@@ -18,3 +18,15 @@
 | wind_speed_kmh | REAL | km/h | Wind speed 10 m above ground | 10.8 | Yes | Open-Meteo `wind_speed_10m` |
 | weather_code | INTEGER | WMO code | Weather condition (0 clear, 3 overcast, 51 light drizzle, 61 slight rain) | 3 | Yes | Open-Meteo `weather_code` |
 | ingested_at_utc | TEXT (ISO 8601) | UTC | When the pipeline run loaded the row | 2026-11-11T00:51:27+00:00 | No | Added by `etl_v1.py` |
+
+## Derived metrics (Week 2)
+
+| Column | Rule |
+|--------|------|
+| temperature_f | temperature_c * 9/5 + 32 |
+| wind_speed_ms | wind_speed_kmh / 3.6 |
+| beaufort_scale | wind_speed_ms mapped to Beaufort force 0 to 12 using standard thresholds |
+| is_daylight | is_day from the API (true during daylight) |
+| weather_description, weather_category | Joined from wmo_codes.csv; unknown codes become "unknown" |
+| observed_at_local | observed_at_utc converted to Europe/London |
+| outdoor_work_risk | high if Beaufort >= 7, or category is storm or snow, or precipitation >= 4 mm; medium if Beaufort >= 5, or precipitation >= 1 mm, or temperature <= 0 C; otherwise low |

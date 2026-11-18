@@ -6,3 +6,4 @@ data/
 *.db
 .ipynb_checkpoints/
 *.egg-info/
+.coverage

@@ -10,6 +10,7 @@ api:
     - precipitation
     - wind_speed_10m
     - weather_code
+    - is_day
   timezone: UTC
 cities:
   - {name: London,     latitude: 51.5085, longitude: -0.1257}
@@ -22,3 +23,4 @@ paths:
   processed_dir: data/processed
   quarantine_dir: data/quarantine
   database: data/weather.db
+  wmo_codes: src/weatherflow/reference/wmo_codes.csv
