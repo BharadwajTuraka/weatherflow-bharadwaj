@@ -1,29 +1,35 @@
 """Wire extract, transform, validate and load together."""
 import logging
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 import pandas as pd
 
-from weatherflow.extract import extract
-from weatherflow.load import load, write_parquet
+from weatherflow.extract import extract, extract_archive
+from weatherflow.load import connect, get_watermarks, load, write_parquet
 from weatherflow.transform import transform
 from weatherflow.validate import DataQualityError, validate, write_dq_report, write_quarantine
 
 logger = logging.getLogger(__name__)
 
+FORECAST_SOURCE = "open_meteo_forecast"
+ARCHIVE_SOURCE = "open_meteo_archive"
 
-def run(config: dict) -> int:
-    """Run the full pipeline and return the number of rows loaded."""
+
+def process(
+    raw: list, config: dict, source: str, check_timeliness: bool, min_hours: int | None = None
+) -> int:
+    """Transform, validate and load raw records. Shared by run and backfill."""
     paths = config["paths"]
-    raw = extract(config)
-    if not raw:
-        logger.error("Nothing was extracted, so nothing will be loaded")
-        return 0
     wmo = pd.read_csv(paths["wmo_codes"])
     df = transform(raw, wmo)
 
+    dq_cfg = dict(config["dq"])
+    if min_hours is not None:
+        dq_cfg["min_hours_per_city"] = min_hours
     cities = [c["name"] for c in config["cities"]]
     try:
-        good, quarantined, results = validate(df, config["dq"], cities)
+        good, quarantined, results = validate(df, dq_cfg, cities, check_timeliness=check_timeliness)
     except DataQualityError as exc:
         write_quarantine(exc.quarantined, paths["quarantine_dir"])
         write_dq_report(
@@ -42,6 +48,52 @@ def run(config: dict) -> int:
     logger.info(
         "DQ summary: %d/%d checks passed, %d rows quarantined", passed, len(results), len(quarantined)
     )
-
     write_parquet(good, paths["processed_dir"])
-    return load(good, config)
+    return load(good, config, source=source)
+
+
+def incremental_starts(config: dict, now: datetime | None = None) -> dict:
+    """Work out, per city, the date to request from: the watermark minus an overlap."""
+    now = now or datetime.now(timezone.utc)
+    db_path = Path(config["paths"]["database"])
+    if not db_path.exists():
+        return {}
+    conn = connect(db_path)
+    try:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        if "fact_weather_hourly" not in tables:
+            return {}
+        marks = get_watermarks(conn, FORECAST_SOURCE, now)
+    finally:
+        conn.close()
+    overlap = timedelta(hours=config["incremental"]["overlap_hours"])
+    return {city: (mark - overlap).date() for city, mark in marks.items()}
+
+
+def run(config: dict) -> int:
+    """Incremental run: fetch only from each city's watermark onwards, then load."""
+    starts = incremental_starts(config)
+    if starts:
+        logger.info("Incremental run, request starts: %s", {k: str(v) for k, v in starts.items()})
+    else:
+        logger.info("No watermark found, falling back to yesterday and today")
+    raw = extract(config, starts=starts)
+    if not raw:
+        logger.error("Nothing was extracted, so nothing will be loaded")
+        return 0
+    return process(raw, config, FORECAST_SOURCE, check_timeliness=True)
+
+
+def backfill(
+    config: dict, days: int | None = None, start: date | None = None, end: date | None = None
+) -> int:
+    """Backfill history from the archive API. Ends at today minus lag_days by default."""
+    lag = config["backfill"]["lag_days"]
+    end = end or (datetime.now(timezone.utc).date() - timedelta(days=lag))
+    start = start or (end - timedelta(days=(days or 30) - 1))
+    logger.info("Backfilling %s to %s", start, end)
+    raw = extract_archive(config, start, end)
+    if not raw:
+        logger.error("Nothing was extracted, so nothing will be loaded")
+        return 0
+    return process(raw, config, ARCHIVE_SOURCE, check_timeliness=False, min_hours=1)

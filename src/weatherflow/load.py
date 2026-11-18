@@ -59,7 +59,19 @@ def upsert_cities(conn: sqlite3.Connection, cities: list[dict]) -> dict:
          for c in cities],
     )
     return dict(conn.execute("SELECT city_name, city_id FROM dim_city").fetchall())
+def get_watermarks(conn: sqlite3.Connection, source: str, now_utc: datetime) -> dict:
+    """Return {city_name: latest loaded hour that has already happened (UTC)} for one source.
 
+    Hours in the future (forecast rows) are ignored, otherwise the mark would sit up to a
+    day ahead and the next run would skip every hour in between.
+    """
+    rows = conn.execute(
+        "SELECT c.city_name, MAX(f.observed_at_utc) FROM fact_weather_hourly f "
+        "JOIN dim_city c ON c.city_id = f.city_id "
+        "WHERE f.source = ? AND f.observed_at_utc <= ? GROUP BY c.city_name",
+        (source, now_utc.strftime("%Y-%m-%dT%H:%M")),
+    ).fetchall()
+    return {name: pd.Timestamp(latest, tz="UTC") for name, latest in rows if latest}
 
 def to_fact_rows(df: pd.DataFrame, city_ids: dict, source: str) -> list[tuple]:
     """Turn the transformed table into rows matching FACT_COLUMNS."""
