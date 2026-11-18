@@ -11,7 +11,15 @@ CONFIG_FILE = Path(__file__).resolve().parents[2] / "config.yaml"
 
 REQUIRED = {
     "api": ["forecast_url", "timeout_seconds", "max_retries", "hourly_variables", "timezone"],
-    "paths": ["raw_dir", "processed_dir", "quarantine_dir", "database", "wmo_codes", "schema_sql"],
+    "paths": [
+        "raw_dir", "processed_dir", "quarantine_dir", "database",
+        "wmo_codes", "schema_sql", "dq_report_dir",
+    ],
+    "dim_date": ["start", "end"],
+    "dq": [
+        "temperature_min_c", "temperature_max_c", "humidity_min_pct", "humidity_max_pct",
+        "max_feels_like_gap_c", "max_data_age_hours", "min_hours_per_city",
+    ],
 }
 
 

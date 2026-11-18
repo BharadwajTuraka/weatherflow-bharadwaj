@@ -21,6 +21,14 @@ cities:
 dim_date:
   start: "2025-01-01"
   end: "2027-12-31"
+dq:
+  temperature_min_c: -30
+  temperature_max_c: 45
+  humidity_min_pct: 0
+  humidity_max_pct: 100
+  max_feels_like_gap_c: 15
+  max_data_age_hours: 3
+  min_hours_per_city: 24
 paths:
   raw_dir: data/raw
   processed_dir: data/processed
@@ -28,3 +36,4 @@ paths:
   database: data/weather.db
   wmo_codes: src/weatherflow/reference/wmo_codes.csv
   schema_sql: sql/schema.sql
+  dq_report_dir: docs/dq_reports
