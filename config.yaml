@@ -21,6 +21,12 @@ cities:
 dim_date:
   start: "2025-01-01"
   end: "2027-12-31"
+backfill:
+  chunk_days: 7
+  lag_days: 5
+  sleep_seconds: 1
+incremental:
+  overlap_hours: 2
 dq:
   temperature_min_c: -30
   temperature_max_c: 45

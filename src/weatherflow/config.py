@@ -16,6 +16,8 @@ REQUIRED = {
         "wmo_codes", "schema_sql", "dq_report_dir",
     ],
     "dim_date": ["start", "end"],
+    "backfill": ["chunk_days", "lag_days", "sleep_seconds"],
+    "incremental": ["overlap_hours"],
     "dq": [
         "temperature_min_c", "temperature_max_c", "humidity_min_pct", "humidity_max_pct",
         "max_feels_like_gap_c", "max_data_age_hours", "min_hours_per_city",
