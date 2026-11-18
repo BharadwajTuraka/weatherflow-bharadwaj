@@ -1,4 +1,4 @@
-"""Load: write rows into SQLite and Parquet."""
+"""Load: Parquet output and an idempotent star-schema load into SQLite."""
 import logging
 import sqlite3
 from datetime import datetime, timezone
@@ -8,42 +8,93 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-LOAD_COLUMNS = [
-    "city", "observed_at_utc", "temperature_c", "feels_like_c", "humidity_pct",
-    "precipitation_mm", "wind_speed_kmh", "weather_code", "ingested_at_utc",
+FACT_COLUMNS = [
+    "city_id", "date_id", "observed_at_utc", "hour_local",
+    "temperature_c", "temperature_f", "feels_like_c", "humidity_pct",
+    "precipitation_mm", "wind_speed_kmh", "wind_speed_ms", "beaufort_scale",
+    "weather_code", "weather_description", "weather_category",
+    "is_daylight", "outdoor_work_risk", "source", "ingested_at_utc",
 ]
+KEY_COLUMNS = ["city_id", "observed_at_utc", "source"]
+UPDATE_COLUMNS = [c for c in FACT_COLUMNS if c not in KEY_COLUMNS]
 
-CREATE_SQL = """
-CREATE TABLE IF NOT EXISTS weather_hourly (
-    city              TEXT    NOT NULL,
-    observed_at_utc   TEXT    NOT NULL,
-    temperature_c     REAL,
-    feels_like_c      REAL,
-    humidity_pct      INTEGER,
-    precipitation_mm  REAL,
-    wind_speed_kmh    REAL,
-    weather_code      INTEGER,
-    ingested_at_utc   TEXT    NOT NULL,
-    PRIMARY KEY (city, observed_at_utc)
-);
-"""
+UPSERT_SQL = (
+    f"INSERT INTO fact_weather_hourly ({', '.join(FACT_COLUMNS)}) "
+    f"VALUES ({', '.join('?' * len(FACT_COLUMNS))}) "
+    f"ON CONFLICT ({', '.join(KEY_COLUMNS)}) DO UPDATE SET "
+    + ", ".join(f"{c} = excluded.{c}" for c in UPDATE_COLUMNS)
+)
 
 
-def load(df: pd.DataFrame, db_path: Path) -> int:
-    """Upsert the DataFrame into weather_hourly and return the number of rows written."""
-    out = df[LOAD_COLUMNS].copy()
-    out["observed_at_utc"] = out["observed_at_utc"].dt.strftime("%Y-%m-%dT%H:%M")
-    out = out.astype(object).where(out.notna(), None)
-    rows = list(out.itertuples(index=False, name=None))
+def connect(db_path: Path) -> sqlite3.Connection:
+    """Open the database with foreign keys switched on."""
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(db_path) as conn:
-        conn.execute(CREATE_SQL)
-        conn.executemany(
-            f"INSERT OR REPLACE INTO weather_hourly ({','.join(LOAD_COLUMNS)}) "
-            f"VALUES ({','.join('?' * len(LOAD_COLUMNS))})",
-            rows,
-        )
-    logger.info("Loaded %d rows into %s", len(rows), db_path)
+    conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def apply_schema(conn: sqlite3.Connection, schema_path: Path) -> None:
+    """Create all tables from sql/schema.sql if they do not exist yet."""
+    conn.executescript(Path(schema_path).read_text(encoding="utf-8"))
+
+
+def build_dim_date(start: str, end: str) -> list[tuple]:
+    """Build one dim_date row per day between start and end (inclusive)."""
+    days = pd.date_range(start, end, freq="D")
+    return [
+        (int(d.strftime("%Y%m%d")), d.strftime("%Y-%m-%d"), d.day_name(),
+         int(d.dayofweek >= 5), d.month, d.year)
+        for d in days
+    ]
+
+
+def upsert_cities(conn: sqlite3.Connection, cities: list[dict]) -> dict:
+    """Upsert dim_city from config and return a {city_name: city_id} map."""
+    conn.executemany(
+        "INSERT INTO dim_city (city_name, country, latitude, longitude) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT (city_name) DO UPDATE SET country = excluded.country, "
+        "latitude = excluded.latitude, longitude = excluded.longitude",
+        [(c["name"], c.get("country", "United Kingdom"), c["latitude"], c["longitude"])
+         for c in cities],
+    )
+    return dict(conn.execute("SELECT city_name, city_id FROM dim_city").fetchall())
+
+
+def to_fact_rows(df: pd.DataFrame, city_ids: dict, source: str) -> list[tuple]:
+    """Turn the transformed table into rows matching FACT_COLUMNS."""
+    out = df.copy()
+    out["city_id"] = out["city"].map(city_ids)
+    if out["city_id"].isna().any():
+        raise ValueError("Some cities are missing from dim_city")
+    out["city_id"] = out["city_id"].astype(int)
+    out["date_id"] = out["observed_at_local"].dt.strftime("%Y%m%d").astype(int)
+    out["hour_local"] = out["observed_at_local"].dt.hour
+    out["observed_at_utc"] = out["observed_at_utc"].dt.strftime("%Y-%m-%dT%H:%M")
+    out["is_daylight"] = out["is_daylight"].astype(int)
+    out["source"] = source
+    cols = out[FACT_COLUMNS].astype(object)
+    cols = cols.where(cols.notna(), None)
+    return list(cols.itertuples(index=False, name=None))
+
+
+def load(df: pd.DataFrame, config: dict, source: str = "open_meteo_forecast") -> int:
+    """Upsert dimensions and facts in ONE transaction. Safe to re-run."""
+    paths = config["paths"]
+    conn = connect(paths["database"])
+    try:
+        apply_schema(conn, paths["schema_sql"])
+        with conn:  # commits on success, rolls back on any error
+            conn.executemany(
+                "INSERT OR IGNORE INTO dim_date VALUES (?, ?, ?, ?, ?, ?)",
+                build_dim_date(config["dim_date"]["start"], config["dim_date"]["end"]),
+            )
+            city_ids = upsert_cities(conn, config["cities"])
+            rows = to_fact_rows(df, city_ids, source)
+            conn.executemany(UPSERT_SQL, rows)
+    finally:
+        conn.close()
+    logger.info("Loaded %d rows into fact_weather_hourly (%s)", len(rows), paths["database"])
     return len(rows)
 
 

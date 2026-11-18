@@ -13,14 +13,18 @@ api:
     - is_day
   timezone: UTC
 cities:
-  - {name: London,     latitude: 51.5085, longitude: -0.1257}
-  - {name: Manchester, latitude: 53.4809, longitude: -2.2374}
-  - {name: Birmingham, latitude: 52.4814, longitude: -1.8998}
-  - {name: Edinburgh,  latitude: 55.9521, longitude: -3.1965}
-  - {name: Cardiff,    latitude: 51.4802, longitude: -3.1792}
+  - {name: London,     country: United Kingdom, latitude: 51.5085, longitude: -0.1257}
+  - {name: Manchester, country: United Kingdom, latitude: 53.4809, longitude: -2.2374}
+  - {name: Birmingham, country: United Kingdom, latitude: 52.4814, longitude: -1.8998}
+  - {name: Edinburgh,  country: United Kingdom, latitude: 55.9521, longitude: -3.1965}
+  - {name: Cardiff,    country: United Kingdom, latitude: 51.4802, longitude: -3.1792}
+dim_date:
+  start: "2025-01-01"
+  end: "2027-12-31"
 paths:
   raw_dir: data/raw
   processed_dir: data/processed
   quarantine_dir: data/quarantine
   database: data/weather.db
   wmo_codes: src/weatherflow/reference/wmo_codes.csv
+  schema_sql: sql/schema.sql

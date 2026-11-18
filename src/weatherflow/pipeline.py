@@ -19,4 +19,4 @@ def run(config: dict) -> int:
     wmo = pd.read_csv(config["paths"]["wmo_codes"])
     df = transform(raw, wmo)
     write_parquet(df, config["paths"]["processed_dir"])
-    return load(df, config["paths"]["database"])
+    return load(df, config)
