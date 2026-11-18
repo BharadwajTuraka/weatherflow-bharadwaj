@@ -5,3 +5,4 @@ __pycache__/
 data/
 *.db
 .ipynb_checkpoints/
+*.egg-info/
