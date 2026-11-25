@@ -1,0 +1,78 @@
+# ADR 0001: The dashboard reads SQLite and shows risk in words
+
+- **Status:** Accepted
+- **Date:** 2026-11-25
+- **Author:** Bharadwaj Turaka
+
+## Context
+The client asks one question: where is outdoor work risky in the next 24 hours? Docker was not installed on my machine, so the PostgreSQL warehouse (Task 3.2) was not available. The star schema already exists in SQLite from Week 2.
+
+## Decision
+We will build the Streamlit dashboard on the existing SQLite database, show risk as the words Low, Medium and HIGH (not colour alone), and warn when data is more than 3 hours old.
+
+## Consequences
+- **Good:** the dashboard works today and uses the same star schema.
+- **Bad:** SQLite allows one writer and no network access, so this is not production-ready.
+- **Follow-up:** point the dashboard at PostgreSQL through DATABASE_URL once Docker is available.
+
+## Alternatives considered
+| Option | Why not chosen |
+| :---- | :---- |
+| Wait for PostgreSQL | Docker was not available and the deadline is fixed |
+| Colour-only risk cells | Not accessible and not clear for colour-blind users |
+
+## Evidence
+Dashboard screenshot in the pull request for `feature/dashboard`.
+
+# ADR 0002: Store times in UTC and display them in Europe/London
+
+- **Status:** Accepted
+- **Date:** 2026-11-25
+- **Author:** Bharadwaj Turaka
+
+## Context
+When the clocks change, 01:00 London time happens twice, so local time can create duplicate or null timestamps. The business plans by UK calendar day.
+
+## Decision
+We will request UTC from the API, store `observed_at_utc`, and convert to Europe/London only for display and for the business date (`date_id`).
+
+## Consequences
+- **Good:** no ambiguous hours, and a safe primary key.
+- **Bad:** every display layer must convert the time.
+- **Follow-up:** keep the conversion in one helper in the dashboard.
+
+## Alternatives considered
+| Option | Why not chosen |
+| :---- | :---- |
+| Store local time | Breaks on the autumn clock change |
+| Show UTC to users | Confusing for UK staff |
+
+## Evidence
+`test_fact_date_is_the_london_local_date` in `tests/test_load.py`.
+
+# ADR 0003: CI runs mocked tests with no secrets; the PostgreSQL test is deferred
+
+- **Status:** Accepted
+- **Date:** 2026-11-25
+- **Author:** Bharadwaj Turaka
+
+## Context
+CI runs on every push and pull request. A real API key in CI would be a leak risk, and real API calls make tests slow and flaky. Docker was not available locally, so a PostgreSQL integration test could not be written and checked.
+
+## Decision
+We will run only mocked, offline tests in GitHub Actions with a 70% coverage gate, and add the PostgreSQL integration test when the warehouse exists.
+
+## Consequences
+- **Good:** CI is fast, free and secret-free. Coverage is currently 99%.
+- **Bad:** the PostgreSQL load path is not yet tested in CI.
+- **Follow-up:** add a test that loads the fixture into PostgreSQL twice and checks the row count.
+
+## Alternatives considered
+| Option | Why not chosen |
+| :---- | :---- |
+| Real API calls in CI | Needs a secret and is unreliable |
+| Skip CI | A broken change could reach main |
+
+## Evidence
+Pull request #7 shows a red check, then a green check after the fix.
+
