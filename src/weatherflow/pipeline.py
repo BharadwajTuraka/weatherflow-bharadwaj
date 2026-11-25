@@ -5,25 +5,24 @@ from pathlib import Path
 
 import pandas as pd
 
-from weatherflow.extract import extract, extract_archive
+from weatherflow.extract import extract, extract_archive, extract_weatherapi
 from weatherflow.load import connect, get_watermarks, load, write_parquet
-from weatherflow.transform import transform
+from weatherflow.normalise import normalise_weatherapi
+from weatherflow.transform import transform, transform_canonical
 from weatherflow.validate import DataQualityError, validate, write_dq_report, write_quarantine
 
 logger = logging.getLogger(__name__)
 
 FORECAST_SOURCE = "open_meteo_forecast"
 ARCHIVE_SOURCE = "open_meteo_archive"
+WEATHERAPI_SOURCE = "weatherapi_forecast"
 
 
-def process(
-    raw: list, config: dict, source: str, check_timeliness: bool, min_hours: int | None = None
+def process_frame(
+    df: pd.DataFrame, config: dict, source: str, check_timeliness: bool, min_hours: int | None = None
 ) -> int:
-    """Transform, validate and load raw records. Shared by run and backfill."""
+    """Validate and load an already transformed table. Shared by every source."""
     paths = config["paths"]
-    wmo = pd.read_csv(paths["wmo_codes"])
-    df = transform(raw, wmo)
-
     dq_cfg = dict(config["dq"])
     if min_hours is not None:
         dq_cfg["min_hours_per_city"] = min_hours
@@ -50,6 +49,15 @@ def process(
     )
     write_parquet(good, paths["processed_dir"])
     return load(good, config, source=source)
+
+
+def process(
+    raw: list, config: dict, source: str, check_timeliness: bool, min_hours: int | None = None
+) -> int:
+    """Transform raw Open-Meteo records, then validate and load them."""
+    wmo = pd.read_csv(config["paths"]["wmo_codes"])
+    df = transform(raw, wmo)
+    return process_frame(df, config, source, check_timeliness, min_hours)
 
 
 def incremental_starts(config: dict, now: datetime | None = None) -> dict:
@@ -97,3 +105,16 @@ def backfill(
         logger.error("Nothing was extracted, so nothing will be loaded")
         return 0
     return process(raw, config, ARCHIVE_SOURCE, check_timeliness=False, min_hours=1)
+
+
+def run_weatherapi(config: dict) -> int:
+    """Load WeatherAPI data through the same validate and load path as Open-Meteo."""
+    raw = extract_weatherapi(config)
+    if not raw:
+        logger.error("Nothing was extracted from WeatherAPI, so nothing will be loaded")
+        raise RuntimeError("WeatherAPI extract failed for every city")
+    codes = pd.read_csv(config["paths"]["weatherapi_codes"])
+    wmo = pd.read_csv(config["paths"]["wmo_codes"])
+    frame = pd.concat([normalise_weatherapi(p, c, codes) for c, p in raw], ignore_index=True)
+    df = transform_canonical(frame, wmo)
+    return process_frame(df, config, WEATHERAPI_SOURCE, check_timeliness=False, min_hours=1)

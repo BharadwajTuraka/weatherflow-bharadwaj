@@ -43,3 +43,15 @@ Tests mock the API, so they run offline. Coverage summary from the last run:
 TOTAL    303    4    99%
 72 passed
 ```
+
+## Second source and secrets
+
+Copy `.env.example` to `.env` and add your own WeatherAPI key. `.env` is never committed.
+
+```
+python -m weatherflow run --source open_meteo
+python -m weatherflow run --source weatherapi
+python -m weatherflow run --source all
+```
+
+A missing key stops the run with exit code 1 before any request is sent.
