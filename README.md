@@ -1,6 +1,4 @@
-# weatherflow-bharadwaj
-# WeatherFlow (Bharadwaj)
-
+![CI](https://github.com/BharadwajTuraka/weatherflow-bharadwaj/actions/workflows/ci.yml/badge.svg)
 Goal: one command pulls live weather for 5 UK cities (London, Manchester, Birmingham, Edinburgh, Cardiff) from the Open-Meteo API, saves the raw data, cleans it, and loads it into a SQLite database that can be queried with SQL.
 
 ## How to set up
