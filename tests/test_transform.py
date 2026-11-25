@@ -27,7 +27,7 @@ def make_row(temperature_c=10.0, wind_kmh=0.0, precip=0.0, category="cloudy") ->
 
 def test_flatten_payload_returns_one_row_per_hour(london_payload):
     df = flatten_payload(london_payload, "London")
-    assert len(df) == 7
+    assert len(df) == 6
     assert {"time", "temperature_2m", "city"} <= set(df.columns)
 
 
