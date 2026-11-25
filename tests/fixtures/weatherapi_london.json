@@ -1,0 +1,15 @@
+{
+  "location": {"name": "London", "tz_id": "Europe/London"},
+  "forecast": {
+    "forecastday": [
+      {
+        "date": "2026-11-25",
+        "hour": [
+          {"time_epoch": 1795564800, "time": "2026-11-25 00:00", "temp_c": 5.0, "feelslike_c": 2.5, "humidity": 85, "precip_mm": 0.0, "wind_kph": 12.0, "is_day": 0, "condition": {"code": 1009}},
+          {"time_epoch": 1795568400, "time": "2026-11-25 01:00", "temp_c": 4.8, "feelslike_c": 2.2, "humidity": 86, "precip_mm": 0.2, "wind_kph": 13.0, "is_day": 0, "condition": {"code": 1183}},
+          {"time_epoch": 1795572000, "time": "2026-11-25 02:00", "temp_c": 4.6, "feelslike_c": 2.0, "humidity": 87, "precip_mm": 0.0, "wind_kph": 11.0, "is_day": 0, "condition": {"code": 9999}}
+        ]
+      }
+    ]
+  }
+}

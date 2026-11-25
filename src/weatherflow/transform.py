@@ -108,3 +108,19 @@ def transform(
     df = add_derived_metrics(df)
     logger.info("Transformed %d rows", len(df))
     return df[COLUMNS]
+
+
+def transform_canonical(
+    frame: pd.DataFrame, wmo: pd.DataFrame, ingested_at: str | None = None
+) -> pd.DataFrame:
+    """Run the shared derive steps on rows that are already in canonical columns."""
+    if frame.empty:
+        raise ValueError("No rows to transform")
+    df = frame.copy()
+    df["observed_at_local"] = df["observed_at_utc"].dt.tz_convert("Europe/London")
+    df["ingested_at_utc"] = ingested_at or datetime.now(timezone.utc).isoformat(timespec="seconds")
+    df = deduplicate(df)
+    df = add_weather_description(df, wmo)
+    df = add_derived_metrics(df)
+    logger.info("Transformed %d rows", len(df))
+    return df[COLUMNS]

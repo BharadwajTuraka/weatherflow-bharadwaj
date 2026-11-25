@@ -4,6 +4,7 @@ import logging
 import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+import os
 
 import requests
 
@@ -140,4 +141,61 @@ def extract_archive(config: dict, start: date, end: date) -> list[tuple[str, dic
             except requests.RequestException as exc:
                 logger.error("Failed to fetch %s %s..%s: %s", city["name"], chunk_start, chunk_end, exc)
             time.sleep(cfg["sleep_seconds"])
+    return results
+
+
+
+class MissingApiKeyError(Exception):
+    """Raised when WEATHERAPI_KEY is not set."""
+
+
+def get_weatherapi_key() -> str:
+    """Read the WeatherAPI key from the environment. Never log or print it."""
+    key = os.environ.get("WEATHERAPI_KEY", "").strip()
+    if not key or key == "your_key_here":
+        raise MissingApiKeyError(
+            "WEATHERAPI_KEY is not set. Copy .env.example to .env and add your key."
+        )
+    return key
+
+
+def fetch_weatherapi(city: dict, wa_cfg: dict, api_cfg: dict, key: str) -> dict:
+    """Fetch WeatherAPI forecast JSON. The key goes in the request, never in a log message."""
+    params = {"key": key, "q": f"{city['latitude']},{city['longitude']}", "days": wa_cfg["days"]}
+    max_retries = api_cfg["max_retries"]
+    for attempt in range(max_retries + 1):
+        try:
+            response = requests.get(
+                wa_cfg["forecast_url"], params=params, timeout=api_cfg["timeout_seconds"]
+            )
+            response.raise_for_status()
+            return response.json()
+        except (requests.Timeout, requests.ConnectionError):
+            error = f"{city['name']}: connection problem"
+        except requests.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else None
+            if status is not None and status < 500:
+                logger.error("%s: HTTP %s from WeatherAPI, not retrying", city["name"], status)
+                raise requests.RequestException(f"HTTP {status}") from None
+            error = f"{city['name']}: HTTP {status}"
+        if attempt < max_retries:
+            wait = 2 ** attempt
+            logger.warning("%s. Retry %d of %d in %ss", error, attempt + 1, max_retries, wait)
+            time.sleep(wait)
+    raise requests.RequestException(error)
+
+
+def extract_weatherapi(config: dict) -> list[tuple[str, dict]]:
+    """Fetch and land raw WeatherAPI data for every city. One failure does not stop the rest."""
+    key = get_weatherapi_key()
+    results = []
+    for city in config["cities"]:
+        try:
+            payload = fetch_weatherapi(city, config["weatherapi"], config["api"], key)
+            path = save_raw(city["name"], payload, config["paths"]["raw_dir"], tag="weatherapi")
+            hours = sum(len(day["hour"]) for day in payload["forecast"]["forecastday"])
+            logger.info("%s: %d WeatherAPI hours saved to %s", city["name"], hours, path)
+            results.append((city["name"], payload))
+        except requests.RequestException as exc:
+            logger.error("Failed to fetch WeatherAPI for %s: %s", city["name"], exc)
     return results
